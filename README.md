@@ -49,7 +49,7 @@ Each article folder is self-contained. It carries its Markdown, SVG diagrams and
 | 2 | [`articles/part2/DZONE-ARTICLE-PART2.md`](articles/part2/DZONE-ARTICLE-PART2.md) | how each engine starts, the full `aegis.yaml`, hard deny, dry run, separate approval, single-use enforcement, audit verification | [`articles/part2/code`](articles/part2/code), `protection` diagram |
 | 3 | [`articles/part3/DZONE-ARTICLE-PART3.md`](articles/part3/DZONE-ARTICLE-PART3.md) | AWS inventory, engine processes and data paths, Cognito JWTs, S3 evidence, modular Terraform, teardown | [`articles/part3/code`](articles/part3/code), `aws-architecture` diagram |
 
-[`articles/README.md`](articles/README.md) describes the publication layout. Run `python articles/tools/extract_snippets.py` after changing article fences.
+[`articles/README.md`](articles/README.md) describes the publication layout.
 
 ## Local quick start
 

@@ -19,23 +19,7 @@ Each `partN/` folder is self-contained:
 
 ## Keeping it consistent
 
-`part1/code` and `part2/code` are publication snapshots of the runnable files at the repository root, which are the ones `Start-All.ps1` and friends actually execute. When a root script changes, refresh its snapshot deliberately.
-
-Tools under `tools/` (run with the repository's Python):
-
-- `extract_snippets.py` regenerates every `snippets/` folder from the article fences.
-- `check_links.py` verifies that every relative link and image resolves.
-- `check_fences.py` confirms each article's code fences are balanced.
-- `scan_secrets.py` fails if any published file carries a real account id, resource id, token, secret, or local user path.
-
-Run all four before publishing:
-
-```powershell
-python articles/tools/extract_snippets.py
-python articles/tools/check_fences.py
-python articles/tools/check_links.py
-python articles/tools/scan_secrets.py
-```
+`part1/code` and `part2/code` are publication snapshots of the runnable files at the repository root, which are the ones `Start-All.ps1` and friends actually execute. When a root script changes, refresh its snapshot deliberately. `snippets/` is the published mirror of the article fences.
 
 ## Placeholders in Part 3
 
