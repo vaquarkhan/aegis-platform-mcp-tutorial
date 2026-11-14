@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "aegis-platform": {
+      "command": "java",
+      "args": [
+        "-jar",
+        "AEGIS_HOME/examples/aegis-gateway-kafka/target/aegis-gateway-kafka-2.0.0-SNAPSHOT-all.jar",
+        "--config",
+        "TUTORIAL_HOME/aegis.yaml",
+        "--stdio"
+      ],
+      "env": {
+        "AEGIS_SIGNING_KEY": "REPLACE_WITH_DEMO_SIGNING_KEY_32_CHARS_MINIMUM",
+        "ICEBERG_CATALOG_TOKEN": "REPLACE_WITH_DEMO_CATALOG_TOKEN_16_CHARS_MINIMUM",
+        "AEGIS_E2E_READER": "PASTE_READER_TOKEN",
+        "AEGIS_E2E_OPERATOR": "PASTE_OPERATOR_TOKEN",
+        "AEGIS_E2E_APPROVER": "PASTE_APPROVER_TOKEN",
+        "AEGIS_E2E_OUTSIDER": "PASTE_OUTSIDER_TOKEN"
+      }
+    }
+  }
+}

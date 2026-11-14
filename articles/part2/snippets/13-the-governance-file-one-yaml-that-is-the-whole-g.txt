@@ -1,0 +1,2 @@
+java -jar "$env:AEGIS_HOME\examples\aegis-gateway-kafka\target\aegis-gateway-kafka-2.0.0-SNAPSHOT-all.jar" --verify-audit .\tampered.jsonl
+BROKEN records=23 head=sha256:70b1049f... error=record 23: record content does not match its hash

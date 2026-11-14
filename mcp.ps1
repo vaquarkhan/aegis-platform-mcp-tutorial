@@ -43,24 +43,19 @@ $token = switch ($Persona) {
 }
 
 $id = Get-Random -Minimum 1 -Maximum 999999
-$meta = @{
+$metaObj = @{
     'io.modelcontextprotocol/protocolVersion' = '2026-07-28'
     'io.modelcontextprotocol/clientCapabilities' = @{}
 }
-if ($Meta) { foreach ($k in $Meta.Keys) { $meta[$k] = $Meta[$k] } }
-$params = @{ '_meta' = $meta }
-$headers = @{
-    Authorization          = "Bearer $token"
-    Accept                 = 'application/json, text/event-stream'
-    'MCP-Protocol-Version' = '2026-07-28'
-    'Mcp-Method'           = $Method
-}
+# $Meta (param) and $meta (local) would be the SAME variable: PowerShell names are case-insensitive.
+# Use a distinct name, and iterate a static copy of the keys so a merge never mutates mid-enumeration.
+if ($Meta) { foreach ($k in @($Meta.Keys)) { $metaObj[$k] = $Meta[$k] } }
+$params = @{ '_meta' = $metaObj }
 if ($Method -eq 'tools/call') {
     if (-not $Tool) { throw '-Tool is required for tools/call' }
     $params['name'] = $Tool
     if ($null -eq $Arguments) { $Arguments = @{} }
     $params['arguments'] = $Arguments
-    $headers['Mcp-Name'] = $Tool
 }
 $body = (@{ jsonrpc = '2.0'; id = $id; method = $Method; params = $params } | ConvertTo-Json -Depth 20 -Compress)
 $tmp = Join-Path $env:TEMP ("aegis-e2e-mcp-" + [guid]::NewGuid().ToString('n') + '.json')

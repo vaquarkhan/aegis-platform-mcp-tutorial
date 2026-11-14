@@ -15,226 +15,201 @@
 -->
 # Aegis platform MCP tutorial
 
-**Publishable standalone project.** One Aegis MCP gateway in front of four **real** Apache engines
-(Flink, Iceberg, Spark, Kafka). This repo is meant to be checked into **its own GitHub project** —
-it is not part of the Aegis source tree. It **depends on** a local build of
-[aegis-mcp-gateway](https://github.com/vaquarkhan/aegis-mcp-gateway) (or your fork).
+One Aegis MCP gateway in front of real Apache Kafka, Flink, Iceberg, and Spark. The repository has one runnable local tutorial at the root and a three-part article series under [`articles/`](articles/README.md). Part 3 repeats the same controls on AWS with an SSM-only EC2 instance, Cognito JWT identity, and audit evidence copied to S3.
 
-Set `AEGIS_HOME` to that checkout before starting.
+Aegis is an independent project (`io.github.vaquarkhan`). It is not an Apache Software Foundation or Amazon Web Services project.
 
-| Piece | Path |
+## What this repository proves
+
+The engines keep their normal APIs. The agent talks only to Aegis. For every `tools/call`, Aegis authenticates the caller, classifies the tool as `READ`, `MUTATE`, or `DESTRUCTIVE`, checks resource scope, applies deny-overrides policy, requires a preview and an independent approval for destructive actions, checks egress, forwards the fixed backend request only after every gate passes, and appends the decision to a hash-chained journal.
+
+The completed local and AWS runs produced the same results:
+
+| Call | Result |
 | --- | --- |
-| Full narrative | [TUTORIAL.md](TUTORIAL.md) |
-| Governance file (the MCP server) | [aegis.yaml](aegis.yaml) |
-| Start engines + Aegis | [Start-All.ps1](Start-All.ps1) |
-| Guided MCP scenario | [Run-Walkthrough.ps1](Run-Walkthrough.ps1) |
-| One-shot MCP client | [mcp.ps1](mcp.ps1) |
-| Stop everything | [Stop-All.ps1](Stop-All.ps1) |
-| Cursor IDE stub | [ide/cursor/mcp.json](ide/cursor/mcp.json) |
+| reader lists `gold` | `ALLOWED`: `customer_ltv`, `daily_revenue`, `product_performance` |
+| reader lists `bronze` | `SCOPE_DENIED` |
+| known outsider token with no groups reads Flink | `POLICY_DENIED` |
+| unknown bearer | HTTP 401 before policy |
+| operator drops `restricted.finance_pnl` | `POLICY_DENIED`, rule `never-drop-restricted`; no approval can override it |
+| operator cancels Flink without approval | `APPROVAL_REQUIRED`; job remains `RUNNING` |
+| operator or reader tries to approve | HTTP 403 |
+| bob approves, eve presents receipt plus token | `ALLOWED`; Flink becomes `CANCELED`, one task |
+| eve replays the same approval | refused: approval token already used |
+| original audit journal | `OK` |
+| one changed word in a copy | `BROKEN` at the edited record |
 
----
+## Read the series
 
-## Use case we solve
+Each article folder is self-contained. It carries its Markdown, SVG diagrams and PNG renders, runnable code, and a numbered `snippets/` mirror of every fenced code block.
 
-**Problem:** An IDE agent (Cursor, Claude, custom MCP client) can talk to Flink, Iceberg, Spark and
-Kafka with raw REST or break-glass MCP servers. With engine credentials it can cancel jobs, drop
-lake tables, pause connectors, or kill Spark drivers — including by mistake or after a prompt-
-injection in table comments / metadata.
+| Part | Start here | What it covers | Code and images |
+| --- | --- | --- | --- |
+| 1 | [`articles/part1/DZONE-ARTICLE-PART1.md`](articles/part1/DZONE-ARTICLE-PART1.md) | incident, MCP risk, local build, dataset, tokens, Cursor, Kiro, VS Code Copilot, Claude Desktop, Gemini CLI, first allow and deny calls | [`articles/part1/code`](articles/part1/code), `architecture`, `build`, and `pipeline` diagrams |
+| 2 | [`articles/part2/DZONE-ARTICLE-PART2.md`](articles/part2/DZONE-ARTICLE-PART2.md) | how each engine starts, the full `aegis.yaml`, hard deny, dry run, separate approval, single-use enforcement, audit verification | [`articles/part2/code`](articles/part2/code), `protection` diagram |
+| 3 | [`articles/part3/DZONE-ARTICLE-PART3.md`](articles/part3/DZONE-ARTICLE-PART3.md) | AWS inventory, engine processes and data paths, Cognito JWTs, S3 evidence, modular Terraform, teardown | [`articles/part3/code`](articles/part3/code), `aws-architecture` diagram |
 
-**Story (laptop demo of a real platform):**
+[`articles/README.md`](articles/README.md) describes the publication layout. Run `python articles/tools/extract_snippets.py` after changing article fences.
 
-| Persona | Job | What they need |
-| --- | --- | --- |
-| **Ana** (reader) | Analyst | Browse **sales** lake tables and see cluster health — never touch **finance** |
-| **Eve** (operator) | Platform engineer | List topics, connectors, Spark apps; cancel a Flink job only with oversight |
-| **Bob** (approver) | On-call lead | Approve Eve’s destructive actions; cannot approve his own |
-| **Outsider** | No groups | Must be refused on every tool |
+## Local quick start
 
-**What we prove in one session:**
+### Prerequisites
 
-1. Four real engines are up and seeded with a small demo dataset.
-2. One MCP URL (`http://127.0.0.1:18080/mcp`) exposes tools for all four.
-3. Readers are scoped to Iceberg `sales.*`; `finance` is denied.
-4. Outsiders get `POLICY_DENIED`.
-5. `flink_cancel_job` needs dry-run + independent approval.
-6. Nobody — not even operators — can `iceberg_drop_table` on `finance.ledger` (`never-drop-finance`).
-7. Every decision is written to a hash-chained audit journal under `run/audit/`.
+- Windows with PowerShell 5.1 or newer
+- JDK 17 or newer
+- Maven 3.9 or newer
+- Git and `curl.exe`
+- roughly 2 GB for first-time dependency downloads
 
----
-
-## Dataset (what Start-All seeds)
-
-Demo data only — enough for MCP reads and governance demos, not a warehouse load.
-
-| Engine | Seeded artifacts | Meaning in the story |
-| --- | --- | --- |
-| **Iceberg** | Namespace `sales` → table **`orders`**; namespace `finance` → table **`ledger`** | Sales is reader-visible; finance is sensitive and drop-protected |
-| **Kafka** | Topic **`orders`**; Connect connector **`orders-file-source`**; file `orders.txt` as the source | Streaming “orders” feed an agent might inspect |
-| **Flink** | One running streaming job (job id printed / stored in `run/state.json` as `flink.jobId`) | Something real to list and (with approval) cancel |
-| **Spark** | Standalone Master + a **SUBMITTED** driver id (`spark.driver`) | Apps an operator can list without a full YARN cluster |
-
-Ports after start:
-
-| Service | URL / port |
-| --- | --- |
-| Aegis MCP | `http://127.0.0.1:18080/mcp` |
-| Aegis health | `http://127.0.0.1:18080/healthz` |
-| Flink JobManager REST | `http://127.0.0.1:18081` |
-| Iceberg REST catalog | `http://127.0.0.1:18181` |
-| Spark app UI / Master | `14040` / `16066` |
-| Kafka broker / Connect | `19092` / `http://127.0.0.1:18083` |
-
----
-
-## What Aegis does here
-
-Aegis sits **between** the IDE/agent and the engines. The agent never holds Flink/Iceberg/Spark/Kafka
-admin credentials for free-form use. For every `tools/call` Aegis:
-
-1. **Authenticates** the bearer token → maps to an actor (`ana` / `eve` / `bob` / `outsider`).
-2. **Classifies** the tool (`READ` / `MUTATE` / `DESTRUCTIVE`) from `aegis.yaml`.
-3. **Applies policy + scopes** (e.g. readers → `iceberg:table:sales.*` only; hard DENY on finance drops).
-4. **Checks egress** (loopback CIDRs only in this tutorial).
-5. For **MUTATE / DESTRUCTIVE**: requires **independent approval**; for **DESTRUCTIVE** also a
-   **fresh dry-run receipt** bound to the same action.
-6. **Audits** allow/deny to `run/audit/aegis-platform.jsonl`, then forwards the HTTP call to the engine
-   only if allowed.
-
-Sources in this demo: `flink`, `iceberg`, `spark-history`, `spark-master`, `kafka-connect`,
-`kafka-admin` — all declared in [aegis.yaml](aegis.yaml). Capability comes from those HTTP tool
-descriptors; **governance stays in the engine**, not in the sources.
-
----
-
-## Prerequisites
-
-- Windows PowerShell 5.1+
-- JDK 17+, Maven 3.9+
-- A **built** Aegis tree with real-engine deps:
+The gateway's default branch is not the 2.0 line used by this tutorial. Clone the review-ready branch by name:
 
 ```powershell
-cd $env:AEGIS_HOME   # path to your aegis-mcp-gateway clone
+git clone -b aegis-mcp-gateway-2.0-review-ready https://github.com/vaquarkhan/aegis-mcp-gateway.git
+cd aegis-mcp-gateway
+if (-not (Test-Path .\examples\break-glass-mcp-servers\lib\BreakGlassMcp.psm1)) {
+    throw 'Wrong gateway branch. This tutorial needs aegis-mcp-gateway-2.0-review-ready.'
+}
 mvn -B -Preal-engines -DskipTests install
+$env:AEGIS_HOME = (Get-Location).Path
 ```
 
-That produces (among other things):
-
-- `examples/aegis-gateway-kafka/target/aegis-gateway-kafka-2.0.0-SNAPSHOT-all.jar` (this tutorial’s gateway)
-- Engine classpaths under `examples/aegis-validation*/target/` and break-glass launchers under
-  `examples/break-glass-mcp-servers/`
-
-Then point this tutorial at that tree:
+Clone this repository in the same parent folder, then start it:
 
 ```powershell
-$env:AEGIS_HOME = 'C:\path\to\aegis-mcp-gateway'
-```
-
----
-
-## Quick start (commands)
-
-```powershell
-$env:AEGIS_HOME = 'C:\path\to\aegis-mcp-gateway'
-cd <this-repo>
+cd ..
+git clone https://github.com/vaquarkhan/aegis-platform-mcp-tutorial.git
+cd aegis-platform-mcp-tutorial
 .\Start-All.ps1
+```
+
+Wait for:
+
+```text
+Aegis platform MCP is up (Flink + Iceberg + Spark + Kafka)
+```
+
+Leave that shell open. In every new PowerShell window, restore the two things PowerShell does not carry over:
+
+```powershell
+$env:AEGIS_HOME = 'C:\path\to\aegis-mcp-gateway'
+Set-Location 'C:\path\to\aegis-platform-mcp-tutorial'
+```
+
+### First proof
+
+```powershell
+.\mcp.ps1 -Persona reader -Tool iceberg_list_tables -Arguments @{ namespace = 'gold' }
+.\mcp.ps1 -Persona reader -Tool iceberg_list_tables -Arguments @{ namespace = 'bronze' }
+.\mcp.ps1 -Persona outsider -Tool flink_get_cluster_info
+.\mcp.ps1 -Persona operator -Tool iceberg_drop_table -Arguments @{ namespace = 'restricted'; table = 'finance_pnl' }
+```
+
+Expected: gold is allowed; bronze is `SCOPE_DENIED`; outsider is `POLICY_DENIED`; the finance drop is `POLICY_DENIED` by `never-drop-restricted`.
+
+### Destructive-action proof
+
+```powershell
+.\Approve-Cancel.ps1
+```
+
+This is a real cancel against the running Flink 1.20.1 MiniCluster. The script performs the whole control sequence:
+
+1. eve dry-runs `flink_cancel_job`; Aegis returns the exact live-job preview, a signed receipt, and a pending approval id. Flink remains `RUNNING`.
+2. eve tries to approve and gets HTTP 403.
+3. bob approves and the record says `decidedBy=bob`.
+4. eve collects the single-use approval token.
+5. eve re-calls with both artifacts; Aegis forwards the fixed Flink cancel request and the job becomes `CANCELED`.
+6. replaying the same approval is refused.
+
+The metadata keys are `io.github.vaquarkhan.aegis/dryRun`, `/dryRunReceipt`, `/approvalToken`, and `/decision`. The complete requests are in [`Approve-Cancel.ps1`](Approve-Cancel.ps1) and Part 2.
+
+### Full walkthrough and audit
+
+```powershell
 .\Run-Walkthrough.ps1
+java -jar "$env:AEGIS_HOME\examples\aegis-gateway-kafka\target\aegis-gateway-kafka-2.0.0-SNAPSHOT-all.jar" --verify-audit .\run\audit\aegis-platform.jsonl
+```
+
+`Run-Walkthrough.ps1` creates `run/WALKTHROUGH.md`. The record count and head hash differ each run; success begins with `OK`.
+
+Stop every process when finished:
+
+```powershell
 .\Stop-All.ps1
 ```
 
-Tokens (rotated each Start-All): `run\keys\tokens.json`  
-Session facts (job ids, tables, connector): `run\state.json`
+## What runs and where data lives
 
-### CLI MCP calls (`mcp.ps1`)
+| Piece | Local endpoint or path | What is real |
+| --- | --- | --- |
+| Aegis | `http://127.0.0.1:18080/mcp` | one Java gateway, full policy, approvals, egress, audit |
+| Kafka 3.9.1 | broker `19092`, controller `19093`, Connect `18083` | one KRaft node, topic `orders`, connector `orders-file-source`; log segments under `run/engine-kafka/engine-<timestamp>/kraft-logs` |
+| Flink 1.20.1 | JobManager REST `18081` | one MiniCluster, one TaskManager, two slots, one endless streaming job at parallelism 1 |
+| Iceberg 1.10.1 | REST catalog `18181` | `JdbcCatalog` over `catalog.db`; `InMemoryFileIO`, so table schemas are real but there are no Parquet files |
+| Spark 4.0.1 | app UI `14040`, Master REST `16066`, RPC `17077` | `local[1]` application and one submitted standalone driver |
+| Identity | `run/keys/tokens.json` | four fresh demo tokens generated on every start |
+| Audit | `run/audit/aegis-platform.jsonl` | append-only hash-chained decisions for this run |
 
-```powershell
-.\mcp.ps1 -Persona reader -Method tools/list
-.\mcp.ps1 -Persona reader -Tool flink_get_cluster_info
-.\mcp.ps1 -Persona reader -Tool iceberg_list_tables -Arguments @{ namespace = 'sales' }
-.\mcp.ps1 -Persona reader -Tool iceberg_list_tables -Arguments @{ namespace = 'finance' }   # SCOPE_DENIED
-.\mcp.ps1 -Persona reader -Tool kafka_list_topics
-.\mcp.ps1 -Persona reader -Tool spark_list_applications -Arguments @{ limit = 10 }
-.\mcp.ps1 -Persona outsider -Tool flink_get_cluster_info                                 # POLICY_DENIED
-.\mcp.ps1 -Persona operator -Tool connect_list_connectors
-.\mcp.ps1 -Persona operator -Tool iceberg_drop_table -Arguments @{ namespace = 'finance'; table = 'ledger' }  # DENY
-```
+The only business records are `order-1` and `order-2`, read from `orders.txt` by Kafka Connect into topic `orders`. The eleven Iceberg tables are empty schemas arranged as bronze, silver, gold, and restricted. The Flink and Spark jobs create real operational state for Aegis to govern; they do not populate the Iceberg tables.
 
-### Cursor / IDE MCP setup
+## IDE and agent clients
 
-1. Run `.\Start-All.ps1` and open `run\keys\tokens.json`.
-2. Copy [ide/cursor/mcp.json](ide/cursor/mcp.json) into Cursor MCP settings (or merge the server block).
-3. Replace the bearer with the **`reader`** token (or `operator` / `approver` for those personas).
+Safe templates are under [`articles/part1/code/ide`](articles/part1/code/ide):
 
-```json
-{
-  "mcpServers": {
-    "aegis-platform": {
-      "url": "http://127.0.0.1:18080/mcp",
-      "headers": {
-        "Authorization": "Bearer <reader token from run/keys/tokens.json>"
-      }
-    }
-  }
-}
-```
+- Cursor: `cursor/mcp.json` to `.cursor/mcp.json`
+- Kiro: `kiro/mcp.json` to `.kiro/settings/mcp.json`
+- VS Code with GitHub Copilot: `vscode/mcp.json` to `.vscode/mcp.json`
+- Claude Desktop: `claude-desktop/claude_desktop_config.json` to its desktop config
+- Gemini CLI: `gemini/settings.json` to `.gemini/settings.json`
 
-4. In the IDE chat, try prompts such as:
+Use the reader token first. Keep client auto-approval off. Client confirmation is useful, but Aegis remains the enforcement boundary even if a client is compromised or configured to auto-run tools. Never commit a copied config after inserting a token.
 
-- “List MCP tools and summarize what each engine can do.”
-- “Show Iceberg tables in the `sales` namespace and the schema of `sales.orders`.”
-- “What tables are in `finance`?” → expect scope deny for the reader token.
-- “List Kafka topics and Connect connectors.” (use operator token for connectors if needed)
-- “Cancel Flink job `<jobId from run/state.json>`.” → expect approval / dry-run flow, not a blind cancel.
+## Root files
 
----
+The root is intentionally small and runnable:
 
-## People and groups
-
-| Persona (`mcp.ps1 -Persona`) | Actor in YAML | Groups | Typical use |
-| --- | --- | --- | --- |
-| `reader` | `ana` | `platform-readers` | browse sales + cluster reads |
-| `operator` | `eve` | `platform-operators` | mutate / destructive (with approval) |
-| `approver` | `bob` | `platform-approvers` | approve Eve; cannot self-approve |
-| `outsider` | `outsider` | none | must be refused |
-
----
-
-## What “real” means here
-
-| Engine | What Start-All starts |
+| File | Purpose |
 | --- | --- |
-| Flink 1.20.1 | MiniCluster JobManager REST on `18081` + a running job |
-| Iceberg 1.10.1 | Official `RESTCatalogServer` on `18181` with `sales.orders` and `finance.ledger` |
-| Spark 4.0.1 | App UI on `14040` + Master REST on `16066` with a SUBMITTED driver |
-| Kafka 3.9.1 | KRaft on `19092` + Connect on `18083` with `orders-file-source` |
+| `README.md` | this entry point |
+| `.gitignore` | excludes tokens, engine state, logs, Terraform state, and copied client configs |
+| `aegis.yaml` | the gateway, tools, policies, scopes, egress, identity, approval, and audit configuration |
+| `Start-All.ps1` | starts the four engines, gateway, and medallion schemas |
+| `Stop-All.ps1` | stops processes recorded by this run and removes `run/state.json` |
+| `Seed-Medallion.ps1` | creates the eleven Iceberg table schemas |
+| `mcp.ps1` | one MCP `tools/list` or `tools/call` request |
+| `Run-Walkthrough.ps1` | runs the allow, scope-deny, policy-deny, and dry-run checks |
+| `Approve-Cancel.ps1` | executes the independent, single-use approval proof |
 
-Same HTTP APIs as standalone clusters; not multi-host YARN/K8s. Launchers are the ones used by
-`$AEGIS_HOME/examples/break-glass-mcp-servers` and the FrontDoors tests.
+Everything else meant for publication belongs under `articles/`.
 
----
+## AWS Part 3
 
-## Publish as its own GitHub repo
+Part 3 ran the same stack on a Windows EC2 `t3.xlarge` with a security group containing zero inbound rules. Systems Manager carried commands. Cognito ID tokens supplied actors and `cognito:groups`. A second gateway verified RS256 signatures and the issuer and audience, then applied the same rules. The two audit journals were copied to S3, downloaded, and verified from the laptop; changing one word broke the chain.
 
-This directory is intentional standalone content (Apache-2.0 headers). Suggested flow:
+Public code is under `articles/part3/code`:
 
-```powershell
-cd <parent-of-this-folder>
-gh repo create aegis-platform-mcp-tutorial --public --source=. --remote=origin --push
-```
+- `cli/`: local provisioning, SSM, Cognito, evidence verification, teardown
+- `remote/`: scripts sent to the instance
+- `terraform/`: root composition and modules for network, IAM, compute, Cognito
 
-Do **not** nest it under the Aegis Incubator tree for release. Point readers at `AEGIS_HOME` + the
-build command above. Keep `run/` gitignored (tokens, audit, engine workdirs).
+The article and public code use placeholders instead of the account, VPC, subnet, security group, instance, AMI, pool, client, bucket, profile, and local paths from the recorded run.
 
----
+## Security boundaries and limits
 
-## Troubleshooting
+- This tutorial is a local or disposable cloud demonstration, not a production deployment.
+- Static tokens and the fixed signing/catalog secrets in the local scripts are demo values. Part 3 replaces caller identity with Cognito JWTs. Production secrets belong in a secret manager or mounted secret files.
+- The backend credentials stay with the gateway. The IDE bearer token is not passed through to Flink, Iceberg, Spark, or Kafka.
+- Aegis governs MCP actions. It does not scan prose, decide whether a prompt is wise, replace AWS IAM, or make an engine invulnerable.
+- `state.type: memory` is one-process state. More than one gateway replica needs shared PostgreSQL state.
+- The Part 3 evidence upload proves file transport and hash-chain integrity. A production evidence store should also use versioning or Object Lock and an identity separate from the instance writer.
 
-| Symptom | Fix |
-| --- | --- |
-| `AEGIS_HOME is not set` / missing break-glass lib | `$env:AEGIS_HOME = '...\aegis-mcp-gateway'` |
-| `missing build output` | `mvn -B -Preal-engines -DskipTests install` in `$AEGIS_HOME` |
-| `ERR_CONNECTION_REFUSED` on `:18080` | Stack not up — run `.\Start-All.ps1`; wait for `/healthz` 200 |
-| Stale Flink `NoClassDefFoundError` / wrong `.m2` user | Delete `$AEGIS_HOME\examples\break-glass-mcp-servers\flink\run\_classpath` (and spark) and restart |
-| `port … is in use` / `already started` | `.\Stop-All.ps1`; remove stale `run\state.json` only after stop |
-| Kafka admin tools missing | Rebuild so `aegis-gateway-kafka-…-all.jar` exists |
+## Repository hygiene
 
-See [TUTORIAL.md](TUTORIAL.md) for the governed Flink cancel walkthrough and YAML section map.
+Generated state stays out of Git:
+
+- `run/`, `*.log`
+- copied IDE configs containing live tokens
+- `.terraform/`, `*.tfstate*`, real `passwords.auto.tfvars`
+- Part 3 runtime ids, temporary Cognito tokens, SSM payloads, source bundles, and downloaded evidence
+
+Before publishing, run the repository security scan and link/fence checks described in `articles/README.md`. Do not commit or push a generated token, password, instance id, audit journal, engine log, or Terraform state.

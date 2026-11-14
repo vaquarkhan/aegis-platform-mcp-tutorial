@@ -14,3 +14,31 @@
 
 run/
 *.log
+# IDE MCP configs carry a live bearer token once you follow the connect steps; never commit them.
+.cursor/mcp.json
+.kiro/settings/mcp.json
+.vscode/mcp.json
+.gemini/settings.json
+
+# Terraform state, providers, provider lock, and real passwords for articles/part3/code/terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+passwords.auto.tfvars
+
+# Part 3 CLI generates its runtime state under %LOCALAPPDATA%\AegisPart3 (outside the repo).
+# These guard against an older layout or a reader changing the runtime directory into the repo.
+articles/part3/code/cli/aegis-part3-src.zip
+articles/part3/code/cli/*.log
+articles/part3/code/cli/state.json
+articles/part3/code/cli/cognito*.json
+articles/part3/code/cli/*-id.txt
+articles/part3/code/cli/trust.json
+articles/part3/code/cli/*-policy.json
+articles/part3/code/cli/ssm-*.params.json
+articles/part3/code/cli/evidence-*/
+
+# Python cache
+__pycache__/
+*.py[cod]

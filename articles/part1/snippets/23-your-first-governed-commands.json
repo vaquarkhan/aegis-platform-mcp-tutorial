@@ -1,0 +1,4 @@
+{"result":{"content":[{"text":
+  "Aegis denied this call: SCOPE_DENIED (step 2). resource out of scope: iceberg:namespace:bronze"}],
+  "isError":true,
+  "_meta":{"io.github.vaquarkhan.aegis/decision":{"outcome":"DENIED:SCOPE_DENIED:step2"}}}}

@@ -1,0 +1,8 @@
+P1 reader gold        ALLOWED  customer_ltv, daily_revenue, product_performance
+P1 reader bronze      DENIED:SCOPE_DENIED:step2   resource out of scope: iceberg:namespace:bronze
+P1 outsider flink     DENIED:POLICY_DENIED:step3  no policy rule allows this action (default deny)
+P1 reader tools/list    14
+P1 operator tools/list  18
+P2 operator flink     ALLOWED  flink-version 1.20.1, slots-total 2, jobs-running 1
+P2 operator drop restricted.finance_pnl   DENIED:POLICY_DENIED:step3  denied by rule never-drop-restricted
+P2 operator cancel without approval       DENIED:APPROVAL_REQUIRED:step4

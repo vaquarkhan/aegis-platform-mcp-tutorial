@@ -1,0 +1,9 @@
+J1  random string as bearer           HTTP 401 {"error":"authentication required"}
+J2  ana  tools/list                   14 tools, all reads
+J3  ana  iceberg_list_tables gold     ALLOWED  customer_ltv, daily_revenue, product_performance
+J4  ana  iceberg_list_tables bronze   DENIED:SCOPE_DENIED:step2  resource out of scope: iceberg:namespace:bronze
+J5  outsider flink_get_cluster_info   DENIED:POLICY_DENIED:step3 no policy rule allows this action (default deny)
+J6  eve  tools/list                   18 tools
+J7  eve  flink_get_cluster_info       ALLOWED  flink-version 1.20.1
+J8  eve  iceberg_drop_table restricted.finance_pnl   DENIED:POLICY_DENIED:step3  denied by rule never-drop-restricted
+J9  eve  flink_cancel_job             DENIED:APPROVAL_REQUIRED:step4  Approval request apr_62aba7c0... is pending

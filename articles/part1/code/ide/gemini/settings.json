@@ -1,0 +1,15 @@
+{
+  "mcp": {
+    "allowed": ["aegis-platform"]
+  },
+  "mcpServers": {
+    "aegis-platform": {
+      "httpUrl": "http://127.0.0.1:18080/mcp",
+      "headers": {
+        "Authorization": "Bearer PASTE_THE_READER_TOKEN_HERE"
+      },
+      "timeout": 30000,
+      "trust": false
+    }
+  }
+}

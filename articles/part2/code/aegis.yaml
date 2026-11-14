@@ -1,0 +1,260 @@
+# Copyright 2026 Viquar Khan and the Aegis MCP Gateway contributors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# =================================================================================================
+# One Aegis MCP gateway in front of four REAL Apache engines on loopback:
+#   Flink 1.20.1 MiniCluster REST   http://127.0.0.1:18081
+#   Iceberg 1.10.1 REST catalog     http://127.0.0.1:18181
+#   Spark 4.0.1 app UI + Master     http://127.0.0.1:14040  and  :16066
+#   Kafka 3.9.1 KRaft + Connect     127.0.0.1:19092  and  http://127.0.0.1:18083
+#
+# Serve with the Kafka-capable gateway jar (includes the kafka-admin plugin):
+#   java -jar examples/aegis-gateway-kafka/target/aegis-gateway-kafka-2.0.0-SNAPSHOT-all.jar --config aegis.yaml
+# =================================================================================================
+gateway:
+  name: aegis-platform
+
+access:
+  writeGroups: [platform-operators]
+  approverGroups: [platform-approvers]
+
+approval:
+  keyEnv: AEGIS_SIGNING_KEY
+
+# Medallion lakehouse governance.
+#   bronze    = raw landing from the Kafka orders stream (noisy, may carry unmasked PII)
+#   silver    = cleaned, conformed, deduplicated
+#   gold      = curated business marts, safe for analysts to read
+#   restricted = sensitive marts (finance P&L, customer PII); analyst-blind and drop-protected
+policy:
+  rules:
+    - {id: readers-browse, groups: [platform-readers, platform-operators], classes: [READ]}
+    - {id: operators-change, groups: [platform-operators], classes: [MUTATE, DESTRUCTIVE]}
+    # No one drops a restricted (sensitive) table through an agent. A DENY beats any allow or approval.
+    - {id: never-drop-restricted, effect: DENY, groups: ["*"], tools: [iceberg_drop_table],
+       resources: ["iceberg:table:restricted.*"]}
+    # Internal Kafka topics are off limits to everyone.
+    - {id: protect-internal-topics, effect: DENY, groups: ["*"],
+       resources: ["kafka:topic:__*", "kafka:topic:_*"]}
+
+# Analysts (readers) see only the curated gold marts. Bronze, silver and restricted are out of scope
+# for them and come back SCOPE_DENIED. Platform engineers (operators) see the whole lakehouse and all
+# four engines.
+scopes:
+  - {groups: [platform-readers], resources: ["iceberg:namespace:gold", "iceberg:table:gold.*"]}
+  - {groups: [platform-operators], resources: ["iceberg:*", "flink:*", "spark:*", "kafka:*"]}
+
+egress:
+  allowCidrs: [127.0.0.0/8]
+
+audit:
+  file: ./run/audit/aegis-platform.jsonl
+
+sources:
+  # -------------------------------------------------------------------------------- Flink
+  - id: flink
+    type: http
+    baseUrl: http://127.0.0.1:18081
+    tools:
+      - name: flink_get_cluster_info
+        description: "Flink cluster overview: version, slots, running jobs."
+        class: READ
+        inputSchema: {type: object, properties: {}, additionalProperties: false}
+        request: {method: GET, path: /overview}
+
+      - name: flink_list_jobs
+        description: List Flink jobs with their state.
+        class: READ
+        inputSchema: {type: object, properties: {}, additionalProperties: false}
+        request: {method: GET, path: /jobs/overview}
+        response: {pointer: /jobs}
+
+      - name: flink_get_job
+        description: Details of one Flink job.
+        class: READ
+        inputSchema:
+          type: object
+          properties: {jobId: {type: string, minLength: 32, maxLength: 32}}
+          required: [jobId]
+          additionalProperties: false
+        request: {method: GET, path: "/jobs/{jobId}"}
+        resources: [{type: "flink:job", pointer: /jobId}]
+
+      - name: flink_cancel_job
+        description: Cancel a running Flink job. Irreversible for that instance.
+        class: DESTRUCTIVE
+        inputSchema:
+          type: object
+          properties: {jobId: {type: string, minLength: 32, maxLength: 32}}
+          required: [jobId]
+          additionalProperties: false
+        request: {method: PATCH, path: "/jobs/{jobId}", query: {mode: cancel}}
+        resources: [{type: "flink:job", pointer: /jobId}]
+        dryRun: {mode: TOOL, previewTool: flink_get_job}
+
+  # -------------------------------------------------------------------------------- Iceberg
+  - id: iceberg
+    type: http
+    baseUrl: http://127.0.0.1:18181
+    credentials: {type: bearer, tokenEnv: ICEBERG_CATALOG_TOKEN}
+    tools:
+      - name: iceberg_list_namespaces
+        description: List top-level namespaces in the Iceberg REST catalog.
+        class: READ
+        request: {method: GET, path: /v1/namespaces}
+        response: {pointer: /namespaces}
+
+      - name: iceberg_list_tables
+        description: List tables in one namespace.
+        class: READ
+        inputSchema:
+          type: object
+          properties: {namespace: {type: string, maxLength: 256}}
+          required: [namespace]
+          additionalProperties: false
+        request: {method: GET, path: "/v1/namespaces/{namespace}/tables"}
+        response: {pointer: /identifiers}
+        resources: [{type: "iceberg:namespace", pointer: /namespace}]
+
+      - name: iceberg_load_table
+        description: Load table metadata (schema, snapshots, location).
+        class: READ
+        inputSchema:
+          type: object
+          properties: {namespace: {type: string, maxLength: 256}, table: {type: string, maxLength: 256}}
+          required: [namespace, table]
+          additionalProperties: false
+        request: {method: GET, path: "/v1/namespaces/{namespace}/tables/{table}"}
+        resources: [{type: "iceberg:table", pointers: [/namespace, /table]}]
+
+      - name: iceberg_drop_table
+        description: Drop a table and purge its data files.
+        class: DESTRUCTIVE
+        inputSchema:
+          type: object
+          properties: {namespace: {type: string, maxLength: 256}, table: {type: string, maxLength: 256}}
+          required: [namespace, table]
+          additionalProperties: false
+        request: {method: DELETE, path: "/v1/namespaces/{namespace}/tables/{table}", query: {purgeRequested: "true"}}
+        resources: [{type: "iceberg:table", pointers: [/namespace, /table]}]
+        dryRun: {mode: TOOL, previewTool: iceberg_load_table}
+
+  # -------------------------------------------------------------------------------- Spark
+  - id: spark-history
+    type: http
+    baseUrl: http://127.0.0.1:14040
+    tools:
+      - name: spark_list_applications
+        description: List Spark applications known to the application UI.
+        class: READ
+        inputSchema:
+          type: object
+          properties: {status: {type: string, enum: [completed, running]}, limit: {type: integer, minimum: 1, maximum: 500}}
+          additionalProperties: false
+        request: {method: GET, path: /api/v1/applications, query: {status: "{status}", limit: "{limit}"}}
+
+      - name: spark_get_application
+        description: Attempts and state of one Spark application.
+        class: READ
+        inputSchema:
+          type: object
+          properties: {appId: {type: string, maxLength: 128}}
+          required: [appId]
+          additionalProperties: false
+        request: {method: GET, path: "/api/v1/applications/{appId}"}
+        resources: [{type: "spark:app", pointer: /appId}]
+
+  - id: spark-master
+    type: http
+    baseUrl: http://127.0.0.1:16066
+    tools:
+      - name: spark_submission_status
+        description: Status of one driver submitted to the standalone Master.
+        class: READ
+        inputSchema:
+          type: object
+          properties: {submissionId: {type: string, maxLength: 128}}
+          required: [submissionId]
+          additionalProperties: false
+        request: {method: GET, path: "/v1/submissions/status/{submissionId}"}
+        resources: [{type: "spark:submission", pointer: /submissionId}]
+
+      - name: spark_kill_submission
+        description: Kill a driver submitted in standalone cluster mode.
+        class: DESTRUCTIVE
+        inputSchema:
+          type: object
+          properties: {submissionId: {type: string, maxLength: 128}}
+          required: [submissionId]
+          additionalProperties: false
+        request: {method: POST, path: "/v1/submissions/kill/{submissionId}"}
+        resources: [{type: "spark:submission", pointer: /submissionId}]
+        dryRun: {mode: TOOL, previewTool: spark_submission_status}
+
+  # -------------------------------------------------------------------------------- Kafka
+  - id: kafka-connect
+    type: http
+    baseUrl: http://127.0.0.1:18083
+    tools:
+      - name: connect_list_connectors
+        description: List Kafka Connect connectors.
+        class: READ
+        request: {method: GET, path: /connectors}
+
+      - name: connect_connector_status
+        description: Status of one connector and its tasks.
+        class: READ
+        inputSchema:
+          type: object
+          properties: {name: {type: string, maxLength: 249}}
+          required: [name]
+          additionalProperties: false
+        request: {method: GET, path: "/connectors/{name}/status"}
+        resources: [{type: "kafka:connector", pointer: /name}]
+
+      - name: connect_pause_connector
+        description: Pause a connector (resumable).
+        class: MUTATE
+        inputSchema:
+          type: object
+          properties: {name: {type: string, maxLength: 249}}
+          required: [name]
+          additionalProperties: false
+        request: {method: PUT, path: "/connectors/{name}/pause"}
+        resources: [{type: "kafka:connector", pointer: /name}]
+
+  - id: kafka-admin
+    type: kafka-admin
+    unlistedTools: HIDE
+    settings:
+      bootstrapServers: 127.0.0.1:19092
+      requestTimeoutMs: 15000
+    tools:
+      kafka_list_topics: {class: READ}
+      kafka_describe_cluster: {class: READ}
+      kafka_describe_topic:
+        class: READ
+        resources: [{type: "kafka:topic", pointer: /topic}]
+
+host:
+  listen: {host: 127.0.0.1, port: 18080}
+  identity:
+    type: static
+    static:
+      tokens:
+        - {tokenEnv: AEGIS_E2E_READER, actor: ana, groups: [platform-readers]}
+        - {tokenEnv: AEGIS_E2E_OPERATOR, actor: eve, groups: [platform-operators]}
+        - {tokenEnv: AEGIS_E2E_APPROVER, actor: bob, groups: [platform-approvers]}
+        - {tokenEnv: AEGIS_E2E_OUTSIDER, actor: outsider, groups: []}
+  stdio: {actor: ana, groups: [platform-readers]}

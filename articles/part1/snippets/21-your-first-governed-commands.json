@@ -1,0 +1,5 @@
+{"result":{"structuredContent":{"value":[
+  {"namespace":["gold"],"name":"customer_ltv"},
+  {"namespace":["gold"],"name":"daily_revenue"},
+  {"namespace":["gold"],"name":"product_performance"}]},
+  "_meta":{"io.github.vaquarkhan.aegis/decision":{"outcome":"ALLOWED"}}}}

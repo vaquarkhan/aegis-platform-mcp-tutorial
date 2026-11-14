@@ -1,0 +1,7 @@
+{"id":"apr_62aba7c0d60143d46c678e8e3a32e862","status":"APPROVED",
+ "actor":"eve","effectiveSubject":"eve",
+ "issuer":"https://cognito-idp.us-east-1.amazonaws.com/us-east-1_POOLID",
+ "tool":"flink_cancel_job","toolClass":"DESTRUCTIVE","source":"flink",
+ "resources":["flink:job:bda81f49d357a4e130ebad187d13eb34"],
+ "decidedBy":"bob","decidedAt":"2026-11-13T20:42:25.543036800Z",
+ "tokenExpiresAt":"2026-11-13T20:52:25.543036800Z"}

@@ -1,0 +1,4 @@
+// operator -> flink_get_cluster_info
+{"flink-version":"1.20.1","taskmanagers":1,"slots-total":2,"jobs-running":1, ...}
+// operator -> iceberg_list_namespaces
+{"value":[["bronze"],["gold"],["restricted"],["silver"]]}

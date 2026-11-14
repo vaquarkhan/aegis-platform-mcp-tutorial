@@ -1,0 +1,2 @@
+java -jar "$env:AEGIS_HOME\examples\aegis-gateway-kafka\target\aegis-gateway-kafka-2.0.0-SNAPSHOT-all.jar" --verify-audit .\run\audit\aegis-platform.jsonl
+OK records=172 head=sha256:c154dca23bfe59084fec136d4e2e8c6245698acdcd306ca63628a2ffd2220cf5

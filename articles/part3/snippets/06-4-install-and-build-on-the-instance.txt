@@ -1,0 +1,8 @@
+19:57:46 java: openjdk version "17.0.21" 2026-10-20 LTS  Corretto-17.0.21.0.11
+19:57:46 mvn: Apache Maven 3.9.11
+19:59:30 bundle sha256=SHA256_OF_YOUR_BUNDLE
+19:59:37 mvn -B -Preal-engines -DskipTests install  (this is the slow step)
+20:04:41 mvn exit=0 elapsed=304s
+20:04:41 artifact aegis-gateway\target\aegis-gateway-2.0.0-SNAPSHOT-all.jar exists=True
+20:04:41 artifact examples\aegis-gateway-kafka\target\aegis-gateway-kafka-2.0.0-SNAPSHOT-all.jar exists=True
+20:04:41 INSTALL_OK

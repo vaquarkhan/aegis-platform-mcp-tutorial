@@ -1,0 +1,11 @@
+2) a non-approver (operator eve) tries to approve: must be refused
+   operator approve HTTP 403: {"error":"caller is not in an approver group"}
+3) approver (bob) approves apr_6e64b2bd209a59b638fd7b21a9f3582f
+   HTTP 200: status=APPROVED decidedBy=bob
+5) operator re-calls cancel WITH approval token + dry-run receipt
+   outcome: ALLOWED
+6) single-use: replay the same approval -> must be refused
+   outcome: DENIED:APPROVAL_REQUIRED:step4
+7) confirm on Flink
+   "state":"CANCELED","tasks":{"canceled":1,"total":1}
+verify-audit: OK records=23 head=sha256:3a49f3f2338bf8850572bc6108873323b8826fc05fe78a3e3a64f6193d984c73

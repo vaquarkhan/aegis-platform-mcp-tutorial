@@ -1,0 +1,31 @@
+gateway:
+  name: hello-aegis
+
+# What the gateway can reach, and the tools it exposes. One backend, one tool.
+sources:
+  - id: demo
+    type: http
+    baseUrl: http://127.0.0.1:9000
+    tools:
+      - name: demo_status
+        description: Read the demo service status.
+        class: READ                      # READ, MUTATE, or DESTRUCTIVE
+        request: {method: GET, path: /status}
+
+# Who may do what. This one rule lets the "users" group run READ tools.
+policy:
+  rules:
+    - {id: users-read, groups: [users], classes: [READ]}
+
+# Every decision is appended here. The gateway refuses to start without it.
+audit:
+  file: ./hello-audit.jsonl
+
+# How to listen, and which token maps to which actor and groups.
+host:
+  listen: {host: 127.0.0.1, port: 18079}
+  identity:
+    type: static
+    static:
+      tokens:
+        - {tokenEnv: DEMO_TOKEN, actor: sam, groups: [users]}

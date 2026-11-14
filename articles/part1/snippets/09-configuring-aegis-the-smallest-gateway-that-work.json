@@ -1,0 +1,3 @@
+{"result":{"tools":[{"name":"demo_status","description":"Read the demo service status.",
+  "annotations":{"readOnlyHint":true,"destructiveHint":false},
+  "_meta":{"io.github.vaquarkhan.aegis/toolClass":"READ","io.github.vaquarkhan.aegis/source":"demo"}}]}}

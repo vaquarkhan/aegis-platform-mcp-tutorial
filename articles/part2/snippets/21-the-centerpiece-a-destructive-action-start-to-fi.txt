@@ -1,0 +1,2 @@
+approver (bob)  POST /aegis/v1/approvals/{id}/approve  ->  HTTP 200, status=APPROVED, decidedBy=bob
+operator (eve)  GET  /aegis/v1/approvals/{id}          ->  { "token": "aat1.eyJhcHByb3Zlci..." }

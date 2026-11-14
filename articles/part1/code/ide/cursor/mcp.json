@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "aegis-platform": {
+      "url": "http://127.0.0.1:18080/mcp",
+      "headers": {
+        "Authorization": "Bearer PASTE_THE_READER_TOKEN_HERE"
+      }
+    }
+  }
+}

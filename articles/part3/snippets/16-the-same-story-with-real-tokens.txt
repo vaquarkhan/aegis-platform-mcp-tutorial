@@ -1,0 +1,4 @@
+J10 eve  dry-run                      ALLOWED  approvalRequestId=apr_62aba7c0d60143d46c678e8e3a32e862
+J11 eve  POST /approvals/{id}/approve HTTP 403 {"error":"caller is not in an approver group"}
+J12 ana  POST /approvals/{id}/approve HTTP 403 {"error":"caller is not in an approver group"}
+J13 bob  POST /approvals/{id}/approve HTTP 200

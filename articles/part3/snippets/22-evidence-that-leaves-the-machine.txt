@@ -1,0 +1,1 @@
+verify tampered (record 3 SCOPE_DENIED->ALLOWED): BROKEN records=3 error=record 3: record content does not match its hash

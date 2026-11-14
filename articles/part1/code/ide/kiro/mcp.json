@@ -3,8 +3,10 @@
     "aegis-platform": {
       "url": "http://127.0.0.1:18080/mcp",
       "headers": {
-        "Authorization": "Bearer REPLACE_WITH_READER_TOKEN_FROM_run_keys_tokens_json"
-      }
+        "Authorization": "Bearer ${AEGIS_READER_TOKEN}"
+      },
+      "disabled": false,
+      "autoApprove": []
     }
   }
 }

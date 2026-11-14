@@ -1,0 +1,15 @@
+egress:
+  allowCidrs: [127.0.0.0/8]
+  allowHosts: [cognito-idp.us-east-1.amazonaws.com]
+
+host:
+  listen: {host: 127.0.0.1, port: 18090}
+  identity:
+    type: jwt
+    jwt:
+      issuer: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_POOLID
+      audience: APP_CLIENT_ID
+      algorithms: [RS256]
+      jwksUri: https://cognito-idp.us-east-1.amazonaws.com/us-east-1_POOLID/.well-known/jwks.json
+      groupsClaim: cognito:groups
+      subjectClaim: cognito:username

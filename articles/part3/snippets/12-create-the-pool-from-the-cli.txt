@@ -1,0 +1,4 @@
+token ana: iss=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_POOLID aud=APP_CLIENT_ID cognito:groups=platform-readers   token_use=id
+token eve: iss=...  cognito:groups=platform-operators
+token bob: iss=...  cognito:groups=platform-approvers
+token outsider: iss=...  cognito:groups=            (a real user, in no group)

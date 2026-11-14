@@ -1,0 +1,4 @@
+J14 eve  GET /approvals/{id}          HTTP 200  token=aat1....
+J15 eve  flink_cancel_job + token + receipt    ALLOWED
+J16 eve  same call again                        DENIED:APPROVAL_REQUIRED:step4  approval token has already been used
+J17 Flink /jobs/overview               "state":"CANCELED","tasks":{"canceled":1,"total":1}

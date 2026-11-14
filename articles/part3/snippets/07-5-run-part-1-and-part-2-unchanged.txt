@@ -1,0 +1,6 @@
+=== starting real flink ===     flink ready: jobId=bfd7cf97130ed46aa986cefac1525669
+=== starting real iceberg ===   iceberg ready
+=== starting real spark ===     spark ready: driver=driver-20261113201733-0000
+=== starting real kafka ===     kafka ready: connector=orders-file-source
+ Aegis platform MCP is up (Flink + Iceberg + Spark + Kafka)
+Start-All elapsed=67s

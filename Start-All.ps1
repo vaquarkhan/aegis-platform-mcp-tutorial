@@ -83,10 +83,13 @@ $envMap = @{
     ICEBERG_CATALOG_TOKEN  = 'end-to-end-tutorial-catalog-credential'
 }
 $logs = Join-Path $Run 'logs'
-$fakeEngine = [pscustomobject]@{ Port = $port; GatewayJar = $gwJar; Env = @{} }
-# Start-AegisMcp expects Get-GatewayEnv-style env; pass ours directly.
 $gwProc = Start-BgJava 'aegis-platform' @('-jar', $gwJar, '--config', $config) $logs $envMap
 Wait-Until { (Invoke-Http 'GET' "http://127.0.0.1:$port/healthz" @{} $null).Status -eq 200 } 120 'Aegis platform MCP on 18080' $gwProc
+
+# Shape the Iceberg catalog into the four-layer medallion lakehouse (bronze/silver/gold/restricted)
+# that matches the Kafka -> Flink -> Iceberg -> Spark story. Runs straight against the catalog, the
+# way a platform team provisions a lake out of band.
+& (Join-Path $Here 'Seed-Medallion.ps1')
 
 $state = [ordered]@{
     startedAt = (Get-Date -Format o)

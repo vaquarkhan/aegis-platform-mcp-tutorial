@@ -1,0 +1,3 @@
+{ "method": "tools/call",
+  "params": { "name": "iceberg_drop_table",
+              "arguments": { "namespace": "restricted", "table": "finance_pnl" } } }

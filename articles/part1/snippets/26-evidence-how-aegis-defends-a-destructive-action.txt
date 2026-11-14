@@ -1,0 +1,5 @@
+without approval    DENIED:APPROVAL_REQUIRED:step4   Flink RUNNING
+bob approves        HTTP 200, decidedBy=bob           Flink RUNNING
+receipt + token     ALLOWED                           Flink CANCELED, total=1
+replay              DENIED:APPROVAL_REQUIRED:step4    approval token already used
+finance drop        DENIED:POLICY_DENIED:step3        never-drop-restricted

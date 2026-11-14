@@ -50,11 +50,15 @@ foreach ($f in $pidFiles) {
     }
 }
 
+# Only ever stop java processes that belong to this tutorial. The gateway's command line names the
+# jar under AEGIS_HOME; the engines are launched through argument files under this repo's run\ tree,
+# so their command lines name THIS directory, not AEGIS_HOME. Accept either.
 $pids = @($pids | Select-Object -Unique)
 foreach ($id in $pids) {
     $p = Get-CimInstance Win32_Process -Filter "ProcessId=$id" -ErrorAction SilentlyContinue
     if ($null -eq $p) { continue }
-    if ($p.Name -eq 'java.exe' -and [string]$p.CommandLine -like "*$Repo*") {
+    $cl = [string]$p.CommandLine
+    if ($p.Name -eq 'java.exe' -and ($cl -like "*$Repo*" -or $cl -like "*$Here*")) {
         Stop-Process -Id $id -Force -ErrorAction SilentlyContinue
         Write-Host "stopped pid $id ($($p.Name))"
     }

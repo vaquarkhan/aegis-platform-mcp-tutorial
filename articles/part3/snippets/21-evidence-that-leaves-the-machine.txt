@@ -1,0 +1,4 @@
+aegis-platform-jwt.jsonl   sha256 local=68409a69d0d6 s3meta=68409a69d0d6 match=True
+aegis-platform.jsonl       sha256 local=6386aedbe7a9 s3meta=6386aedbe7a9 match=True
+verify aegis-platform.jsonl     : OK records=23 head=sha256:3a49f3f2338bf8850572bc6108873323b8826fc05fe78a3e3a64f6193d984c73
+verify aegis-platform-jwt.jsonl : OK records=30 head=sha256:22326b7eb1baf9ab49ea5b63a777e49187e2664fbe95bdb1aa425716ff16f1f4

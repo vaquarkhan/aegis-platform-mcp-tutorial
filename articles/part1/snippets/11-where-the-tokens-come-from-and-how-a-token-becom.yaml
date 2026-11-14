@@ -1,0 +1,9 @@
+host:
+  identity:
+    type: static
+    static:
+      tokens:
+        - {tokenEnv: AEGIS_E2E_READER,   actor: ana,      groups: [platform-readers]}
+        - {tokenEnv: AEGIS_E2E_OPERATOR, actor: eve,      groups: [platform-operators]}
+        - {tokenEnv: AEGIS_E2E_APPROVER, actor: bob,      groups: [platform-approvers]}
+        - {tokenEnv: AEGIS_E2E_OUTSIDER, actor: outsider, groups: []}

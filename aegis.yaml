@@ -32,18 +32,27 @@ access:
 approval:
   keyEnv: AEGIS_SIGNING_KEY
 
+# Medallion lakehouse governance.
+#   bronze    = raw landing from the Kafka orders stream (noisy, may carry unmasked PII)
+#   silver    = cleaned, conformed, deduplicated
+#   gold      = curated business marts, safe for analysts to read
+#   restricted = sensitive marts (finance P&L, customer PII); analyst-blind and drop-protected
 policy:
   rules:
     - {id: readers-browse, groups: [platform-readers, platform-operators], classes: [READ]}
     - {id: operators-change, groups: [platform-operators], classes: [MUTATE, DESTRUCTIVE]}
-    - {id: never-drop-finance, effect: DENY, groups: ["*"], tools: [iceberg_drop_table],
-       resources: ["iceberg:table:finance.*"]}
+    # No one drops a restricted (sensitive) table through an agent. A DENY beats any allow or approval.
+    - {id: never-drop-restricted, effect: DENY, groups: ["*"], tools: [iceberg_drop_table],
+       resources: ["iceberg:table:restricted.*"]}
+    # Internal Kafka topics are off limits to everyone.
     - {id: protect-internal-topics, effect: DENY, groups: ["*"],
        resources: ["kafka:topic:__*", "kafka:topic:_*"]}
 
-# Readers may only touch Iceberg sales.*; operators see the whole lake.
+# Analysts (readers) see only the curated gold marts. Bronze, silver and restricted are out of scope
+# for them and come back SCOPE_DENIED. Platform engineers (operators) see the whole lakehouse and all
+# four engines.
 scopes:
-  - {groups: [platform-readers], resources: ["iceberg:namespace:sales", "iceberg:table:sales.*"]}
+  - {groups: [platform-readers], resources: ["iceberg:namespace:gold", "iceberg:table:gold.*"]}
   - {groups: [platform-operators], resources: ["iceberg:*", "flink:*", "spark:*", "kafka:*"]}
 
 egress:
